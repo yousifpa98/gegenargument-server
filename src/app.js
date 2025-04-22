@@ -14,7 +14,13 @@ const app = express();
 connectDb();
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://gegenargument.netlify.app",
+    credentials: true, // cookies
+  }),
+);
+
 app.use(helmet());
 app.use(compression());
 app.use(morgan("dev"));
