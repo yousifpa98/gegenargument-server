@@ -7,7 +7,7 @@ const SourceSchema = new Schema({
   publishedAt: { type: Date },
   suggestedBy: { type: String }, // "anon" oder UserId
   reviewed: { type: Boolean, default: false },
-  reviewedBy: { type: String },
+  reviewedBy: { type: Schema.Types.ObjectId, ref: "User" },
   addedAt: { type: Date, default: Date.now },
 });
 
@@ -24,16 +24,20 @@ const ArgumentSchema = new Schema(
     sources: [SourceSchema],
     suggestedSources: [SourceSchema],
 
-    createdBy: { type: String, default: "anon" },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User" }, // User-Referenz
+    createdByFallback: { type: String, default: "anon" }, // Falls Gast
+
     reviewed: { type: Boolean, default: false },
-    reviewedBy: { type: String },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: "User" }, // Wer geprüft hat
+
     published: { type: Boolean, default: false },
   },
   {
-    timestamps: true,
+    timestamps: true, // createdAt und updatedAt automatisch
   },
 );
 
+// Textindex für Suche
 ArgumentSchema.index({
   thesis: "text",
   antithesis: "text",

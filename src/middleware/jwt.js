@@ -25,3 +25,18 @@ export const authenticate = (req, res, next) => {
     });
   }
 };
+
+
+export const optionalAuthenticate = (req, res, next) => {
+  try {
+    const token = req.cookies?.token;
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+    }
+  } catch (error) {
+    // Keine Panik: wenn token ungültig ist oder fehlt → einfach ignorieren
+    req.user = undefined;
+  }
+  next();
+};

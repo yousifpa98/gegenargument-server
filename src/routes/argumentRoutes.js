@@ -8,7 +8,7 @@ import {
   listArguments,
 } from "../controllers/argumentController.js";
 
-import { authenticate } from "../middleware/jwt.js";
+import { authenticate, optionalAuthenticate } from "../middleware/jwt.js";
 import { roleCheck } from "../middleware/roleCheck.js";
 import { searchArguments } from "../controllers/argumentController.js";
 
@@ -17,7 +17,7 @@ const router = express.Router();
 router.get("/search", searchArguments);
 
 // Einreichen (auch Gäste möglich)
-router.post("/", submitArgument);
+router.post("/", optionalAuthenticate, submitArgument);
 
 router.get("/", listArguments);
 

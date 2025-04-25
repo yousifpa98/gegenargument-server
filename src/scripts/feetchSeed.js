@@ -12,7 +12,7 @@ const API_BASE = "http://localhost:3001";
 // 👤 Deine Login-Daten
 const LOGIN_CREDENTIALS = {
   email: "yousifpa@proton.me",
-  password: "Risugami1!",
+  password: "",
 };
 
 // 💬 Argumente zum Einreichen & Veröffentlichen
@@ -94,7 +94,7 @@ async function loginAndSeed() {
 
   const loginRes = await fetchWithCookies(`${API_BASE}/api/users/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Origin": "https://gegenargument.netlify.app" },
     body: JSON.stringify(LOGIN_CREDENTIALS),
   });
 

@@ -32,14 +32,39 @@ export const submitArgument = async (req, res) => {
       tagIds.push(existing._id);
     }
 
+    // Create argument with proper user reference
     const newArgument = new Argument({
       thesis,
       antithesis,
       tags: tagIds,
-      createdBy: req.user?.id || "anon",
       slug: generateSlug(thesis),
       sources: sources?.map((src) => ({ ...src, reviewed: false })) || [],
     });
+
+    // Set user reference if authenticated, otherwise use fallback
+    console.log("User in request:", req.user); // Log the entire user object to see what's there
+
+    if (req.user) {
+      if (req.user.id) {
+        console.log("Setting createdBy to user ID:", req.user.id);
+        newArgument.createdBy = req.user.id;
+      } else {
+        console.log(
+          "User object exists but has no id property. User:",
+          JSON.stringify(req.user),
+        );
+        // Check if there's an alternative ID field
+        if (req.user._id) {
+          console.log("Using _id instead:", req.user._id);
+          newArgument.createdBy = req.user._id;
+        } else {
+          newArgument.createdByFallback = "anon";
+        }
+      }
+    } else {
+      console.log("No user in request, using fallback");
+      newArgument.createdByFallback = "anon";
+    }
 
     await newArgument.save();
 
@@ -79,7 +104,7 @@ export const publishArgument = async (req, res) => {
     arg.responseSuggestion = responseSuggestion;
     arg.published = true;
     arg.reviewed = true;
-    arg.reviewedBy = req.user.id;
+    arg.reviewedBy = req.user.id; // User ID as ObjectId
     arg.slug = generateSlug(arg.thesis);
 
     await arg.save();
@@ -99,7 +124,9 @@ export const getArgumentBySlug = async (req, res) => {
     const arg = await Argument.findOne({
       slug: req.params.slug,
       published: true,
-    }).populate("tags");
+    })
+      .populate("tags")
+      .populate("createdBy", "username"); // Also populate user info
 
     if (!arg) return res.status(404).json({ message: "Not found" });
 
@@ -118,15 +145,23 @@ export const suggestSource = async (req, res) => {
     const arg = await Argument.findOne({ slug });
     if (!arg) return res.status(404).json({ message: "Argument not found" });
 
-    arg.suggestedSources.push({
+    // Create source object with proper user reference
+    const sourceObj = {
       url,
       title,
       publisher,
       publishedAt,
-      suggestedBy: req.user?.id || "anon",
       reviewed: false,
-    });
+    };
 
+    // Set suggestedBy field
+    if (req.user && req.user.id) {
+      sourceObj.suggestedBy = req.user.id;
+    } else {
+      sourceObj.suggestedBy = "anon";
+    }
+
+    arg.suggestedSources.push(sourceObj);
     await arg.save();
     res.status(200).json({ message: "Quelle eingereicht, wartet auf Prüfung" });
   } catch (error) {
@@ -147,7 +182,7 @@ export const approveSource = async (req, res) => {
     if (!source) return res.status(404).json({ message: "Source not found" });
 
     source.reviewed = true;
-    source.reviewedBy = req.user.id;
+    source.reviewedBy = req.user.id; // User ID as ObjectId
 
     arg.sources.push(source);
     arg.suggestedSources.id(sourceId).deleteOne();
@@ -175,7 +210,8 @@ export const searchArguments = async (req, res) => {
 
     const args = await Argument.find({ $and: conditions })
       .limit(30)
-      .populate("tags");
+      .populate("tags")
+      .populate("createdBy", "username"); // Add user info
 
     res.status(200).json(args);
   } catch (error) {
@@ -200,7 +236,6 @@ export const listArguments = async (req, res) => {
       ...(query ? { $text: { $search: query } } : {}),
       ...(tagIds.length ? { tags: { $in: tagIds } } : {}),
     };
-    
 
     const sortOptions = {
       newest: { createdAt: -1 },
@@ -214,6 +249,7 @@ export const listArguments = async (req, res) => {
         .skip(skip)
         .limit(limit)
         .populate("tags")
+        .populate("createdBy", "username") // Add user info
         .select(
           query && sort === "relevance"
             ? { score: { $meta: "textScore" } }
@@ -233,6 +269,74 @@ export const listArguments = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Failed to fetch arguments",
+      error: error.message,
+    });
+  }
+};
+
+// Get arguments for moderation (unpublished)
+export const getArgumentsForModeration = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page) || 1;
+    const skip = (page - 1) * limit;
+
+    const filter = {
+      published: false,
+      reviewed: false,
+    };
+
+    const [args, totalCount] = await Promise.all([
+      Argument.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("tags")
+        .populate("createdBy", "username"),
+      Argument.countDocuments(filter),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    res.status(200).json({
+      data: args,
+      totalCount,
+      totalPages,
+      currentPage: page,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch arguments for moderation",
+      error: error.message,
+    });
+  }
+};
+
+// Get arguments for a specific user
+export const getUserArguments = async (req, res) => {
+  try {
+    // Get the user ID (either from params or from the authenticated user)
+    const userId = req.params.userId || req.user.id;
+
+    // Check if the user has permission (can only see own arguments unless admin/mod)
+    if (
+      req.params.userId &&
+      req.params.userId !== req.user.id &&
+      !["admin", "mod"].includes(req.user.roles)
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to see other users' arguments" });
+    }
+
+    const args = await Argument.find({ createdBy: userId })
+      .sort({ createdAt: -1 })
+      .populate("tags");
+
+    res.status(200).json(args);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch user arguments",
       error: error.message,
     });
   }

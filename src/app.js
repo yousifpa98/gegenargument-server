@@ -14,10 +14,16 @@ const app = express();
 connectDb();
 
 // Middleware
+const allowedOrigins = [
+  "https://gegenargument.netlify.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+
 app.use(
   cors({
-    origin: "https://gegenargument.netlify.app",
-    credentials: true, // cookies
+    origin: allowedOrigins,
+    credentials: true,
   }),
 );
 
